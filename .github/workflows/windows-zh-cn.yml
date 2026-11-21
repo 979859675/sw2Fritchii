@@ -1,0 +1,235 @@
+name: windows-zh-cn
+
+# 汉化版 Windows 构建：MSVC 编译，内嵌简体中文翻译（ENABLE_QT_TRANSLATION=ON），
+# 再用 windeployqt 收集 Qt 运行库，NSIS 生成中文安装包。
+# 产物：lichii-windows-x86_64-zh-cn.zip（解压即用）与 lichii-windows-x86_64-zh-cn-setup.exe（安装程序）。
+
+on:
+  push:
+    branches:
+      - nx2
+    paths:
+      - "dist/languages/**"
+      - "dist/installer.nsi"
+      - ".github/workflows/windows-zh-cn.yml"
+  pull_request:
+    paths:
+      - "dist/languages/**"
+      - "dist/installer.nsi"
+      - ".github/workflows/windows-zh-cn.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-zh-cn-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Windows x86_64 (Chinese)
+    runs-on: windows-2022
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2000M
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtcharts
+          cache: true
+
+      # windeployqt and Qt's LinguistTools (lrelease) both ship with the base Qt install.
+      - name: Verify Qt tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in windeployqt lrelease; do
+            test -x "$QT_ROOT_DIR/bin/$tool.exe"
+          done
+          "$QT_ROOT_DIR/bin/lrelease.exe" -version
+
+      - name: Install sccache
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'sccache.zip'
+          Invoke-WebRequest -OutFile $zip https://github.com/mozilla/sccache/releases/download/v0.19.0/sccache-v0.19.0-x86_64-pc-windows-msvc.zip
+          Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'sccache')
+          $bin = (Get-ChildItem -Recurse -Filter sccache.exe (Join-Path $env:RUNNER_TEMP 'sccache')).DirectoryName
+          $bin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: ./tools/windows/install-vulkan-sdk.ps1
+
+      - name: Verify Vulkan tools
+        shell: pwsh
+        run: glslangValidator --version
+
+      - name: Restore CPM downloads
+        id: cpm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .cache/cpm
+          key: cpm-windows-x86_64-zh-v1-${{ hashFiles('cpmfile.json', 'CMakeLists.txt', 'CMakeModules/CPM*.cmake', 'externals/**/CMakeLists.txt', 'src/**/CMakeLists.txt') }}
+          restore-keys: |
+            cpm-windows-x86_64-zh-v1-
+            cpm-windows-x86_64-v2-
+
+      - name: Restore compiler objects
+        id: compiler-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .sccache
+          key: objects-windows-x86_64-zh-v1-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            objects-windows-x86_64-zh-v1-${{ github.sha }}-
+            objects-windows-x86_64-zh-v1-
+
+      # ENABLE_QT_TRANSLATION compiles every dist/languages/*.ts into .qm files that are embedded in
+      # the binary, which is what makes the interface (and its Chinese option) exist at all. The
+      # release workflow leaves it off, so this is the flag that matters here.
+      - name: Configure
+        shell: bash
+        run: >-
+          cmake -S . -B build/zh-cn -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=OFF
+          -DYUZU_TESTS=OFF
+          -DYUZU_CMD=ON
+          -DYUZU_ROOM=OFF
+          -DYUZU_ROOM_STANDALONE=OFF
+          -DYUZU_USE_BUNDLED_QT=OFF
+          -DYUZU_USE_BUNDLED_SDL3=ON
+          -DENABLE_QT_TRANSLATION=ON
+          -DENABLE_UPDATE_CHECKER=ON
+          -DLICHII_BUILD_TAG=zh-cn-${{ github.run_number }}
+          -DLICHII_BUILD_PLATFORM=windows-x86_64-zh-cn
+          -DUSE_DISCORD_PRESENCE=OFF
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Save CPM downloads
+        if: steps.cpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .cache/cpm
+          key: ${{ steps.cpm-cache.outputs.cache-primary-key }}
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          sccache --zero-stats
+          cmake --build build/zh-cn --target yuzu yuzu-cmd --parallel
+          sccache --show-stats
+
+      - name: Stop sccache
+        if: always() && steps.compiler-cache.outcome == 'success'
+        shell: pwsh
+        run: sccache --stop-server
+
+      - name: Save compiler objects
+        if: always() && steps.compiler-cache.outcome == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: .sccache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+
+      # The Chinese .qm file must be inside the program, not merely next to it.
+      - name: Verify the Chinese translation is embedded
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/languages/zh_CN.ts
+          if ! grep -q 'languages/zh_CN.qm' build/zh-cn/src/yuzu/languages.qrc; then
+            echo "zh_CN.qm is missing from the embedded translation bundle"
+            exit 1
+          fi
+          ls build/zh-cn/src/yuzu/*.qm | sed 's#^.*/##' | sort | tr '\n' ' '
+          echo
+
+      - name: Package Windows binary
+        shell: pwsh
+        run: |
+          $bin = 'build/zh-cn/bin'
+          foreach ($exe in 'lichii.exe', 'eden-cli.exe') {
+            if (-not (Test-Path "$bin/$exe")) {
+              throw "$bin/$exe was not produced"
+            }
+          }
+          # --no-translations keeps Qt's own qt_*.qm files out; the emulator's translations are
+          # compiled into lichii.exe already.
+          windeployqt --release --no-translations "$bin/lichii.exe"
+
+      - name: Build Chinese installer
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'installer'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item dist/installer.nsi $stage/installer.nsi
+          Copy-Item dist/lichii.ico $stage/lichii.ico
+          Copy-Item LICENSE.txt $stage/LICENSE.txt
+          # The installer asks in Chinese only: Simplified is preselected, Traditional is offered.
+          @'
+          !insertmacro MUI_LANGUAGE "English"
+          !insertmacro MUI_LANGUAGE "SimpChinese"
+          !insertmacro MUI_LANGUAGE "TradChinese"
+          '@ | Set-Content -Encoding utf8 (Join-Path $stage 'languages.nsh')
+          # NSIS cuts a /D value at commas and spaces, so paths stay relative and short, and
+          # forward slashes are used so a trailing backslash cannot escape the closing quote.
+          $bin = '..\build\zh-cn\bin'
+          Push-Location $stage
+          try {
+            & makensis /INPUTCHARSET UTF8 `
+              /DPRODUCT_VERSION=zh-cn-${{ github.run_number }} `
+              /DARCH=x86_64 `
+              /DVARIANT=zh-cn `
+              '/DINSTALLER_TITLE=Lichii 中文版' `
+              /DINSTALLER_LANGUAGES_FILE=languages.nsh `
+              /DINSTALLER_DEFAULT_LANG=2052 `
+              /DBINARY_SOURCE_DIR=$bin `
+              /DLICENSE_FILE=LICENSE.txt `
+              /DINSTALLER_ICON=lichii.ico `
+              /DOUTFILE=lichii-windows-x86_64-zh-cn-setup.exe `
+              installer.nsi
+            if ($LASTEXITCODE -ne 0) { throw "makensis failed with $LASTEXITCODE" }
+            Move-Item 'lichii-windows-x86_64-zh-cn-setup.exe' $env:GITHUB_WORKSPACE -Force
+          } finally {
+            Pop-Location
+          }
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/zh-cn/bin/* -DestinationPath lichii-windows-x86_64-zh-cn.zip -Force
+          Get-ChildItem lichii-windows-x86_64-zh-cn* | Format-Table Name, Length
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: lichii-windows-x86_64-zh-cn
+          path: |
+            lichii-windows-x86_64-zh-cn.zip
+            lichii-windows-x86_64-zh-cn-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

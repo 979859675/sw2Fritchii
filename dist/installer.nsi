@@ -20,16 +20,43 @@
 Unicode true
 ManifestDPIAware true
 
-!define PRODUCT_NAME "Lichii"
-!define PRODUCT_PUBLISHER "Lichii contributors"
-!define PRODUCT_WEB_SITE "https://github.com/zortos293/Eglantine"
+!ifndef PRODUCT_NAME
+  !define PRODUCT_NAME "Lichii"
+!endif
+!ifndef PRODUCT_PUBLISHER
+  !define PRODUCT_PUBLISHER "Lichii contributors"
+!endif
+!ifndef PRODUCT_WEB_SITE
+  !define PRODUCT_WEB_SITE "https://github.com/zortos293/Eglantine"
+!endif
+; Window title of the installer. Overridable so a localized build can name itself in its language.
+!ifndef INSTALLER_TITLE
+  !define INSTALLER_TITLE "${PRODUCT_NAME}"
+!endif
+; Language preselected in INSTALLER_LANGUAGES_FILE mode. 2052 is Simplified Chinese.
+!ifndef INSTALLER_DEFAULT_LANG
+  !define INSTALLER_DEFAULT_LANG 1033
+!endif
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\${PRODUCT_NAME}.exe"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
-!define BINARY_SOURCE_DIR "..\bin"
+; Paths are relative to this file when it is run from its own directory (the default), and
+; overridden by the build when it drives makensis from elsewhere.
+!ifndef BINARY_SOURCE_DIR
+  !define BINARY_SOURCE_DIR "..\bin"
+!endif
+!ifndef LICENSE_FILE
+  !define LICENSE_FILE "..\LICENSE.txt"
+!endif
+!ifndef INSTALLER_ICON
+  !define INSTALLER_ICON "lichii.ico"
+!endif
 
-Name "${PRODUCT_NAME}"
-OutFile "${PRODUCT_NAME}-Windows-${PRODUCT_VERSION}-${ARCH}-${VARIANT}-installer.exe"
+Name "${INSTALLER_TITLE}"
+!ifndef OUTFILE
+  !define OUTFILE "${PRODUCT_NAME}-Windows-${PRODUCT_VERSION}-${ARCH}-${VARIANT}-installer.exe"
+!endif
+OutFile "${OUTFILE}"
 SetCompressor /SOLID lzma
 InstallDir "$LOCALAPPDATA\$(^Name)" 
 ShowInstDetails show
@@ -40,11 +67,11 @@ ShowUnInstDetails show
 !include "nsDialogs.nsh"
 
 ; MUI Settings
-!define MUI_ICON "lichii.ico"
+!define MUI_ICON "${INSTALLER_ICON}"
 !define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
 
 ; License page
-!insertmacro MUI_PAGE_LICENSE "..\LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
 ; Desktop Shortcut page
 Page custom desktopShortcutPageCreate desktopShortcutPageLeave
 ; Directory page
@@ -63,7 +90,23 @@ Var DesktopShortcutPageDialog
 Var DesktopShortcutCheckbox
 Var DesktopShortcut
 
-; Language files
+; Page strings of this installer's own pages. MUI uses the default language (the first one loaded)
+; for any language that has no string of its own.
+LangString LICHII_SHORTCUT_TITLE ${LANG_ENGLISH} "Create Desktop Shortcut"
+LangString LICHII_SHORTCUT_TITLE ${LANG_SIMPCHINESE} "创建桌面快捷方式"
+LangString LICHII_SHORTCUT_TITLE ${LANG_TRADCHINESE} "建立桌面捷徑"
+LangString LICHII_SHORTCUT_SUBTITLE ${LANG_ENGLISH} "Would you like to create a desktop shortcut?"
+LangString LICHII_SHORTCUT_SUBTITLE ${LANG_SIMPCHINESE} "是否要创建桌面快捷方式？"
+LangString LICHII_SHORTCUT_SUBTITLE ${LANG_TRADCHINESE} "是否要建立桌面捷徑？"
+LangString LICHII_SHORTCUT_CHECKBOX ${LANG_ENGLISH} "Create a desktop shortcut"
+LangString LICHII_SHORTCUT_CHECKBOX ${LANG_SIMPCHINESE} "创建桌面快捷方式"
+LangString LICHII_SHORTCUT_CHECKBOX ${LANG_TRADCHINESE} "建立桌面捷徑"
+
+; Language files. A localized build passes INSTALLER_LANGUAGES_FILE: an .nsh holding its own
+; MUI_LANGUAGE list, which is then used instead of the full list below.
+!ifdef INSTALLER_LANGUAGES_FILE
+!include "${INSTALLER_LANGUAGES_FILE}"
+!else
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 !insertmacro MUI_LANGUAGE "TradChinese"
@@ -85,24 +128,30 @@ Var DesktopShortcut
 !insertmacro MUI_LANGUAGE "Swedish"
 !insertmacro MUI_LANGUAGE "Turkish"
 !insertmacro MUI_LANGUAGE "Vietnamese"
+!endif
 
 ; MUI end ------
 
 Function .onInit
   StrCpy $DesktopShortcut 1
 
+  !ifdef INSTALLER_LANGUAGES_FILE
+  ; A localized build installs in its own language without asking.
+  StrCpy $LANGUAGE ${INSTALLER_DEFAULT_LANG}
+  !else
   !insertmacro MUI_LANGDLL_DISPLAY
+  !endif
 FunctionEnd
 
 Function desktopShortcutPageCreate
-  !insertmacro MUI_HEADER_TEXT "Create Desktop Shortcut" "Would you like to create a desktop shortcut?"
+  !insertmacro MUI_HEADER_TEXT "$(LICHII_SHORTCUT_TITLE)" "$(LICHII_SHORTCUT_SUBTITLE)"
   nsDialogs::Create 1018
   Pop $DesktopShortcutPageDialog
   ${If} $DesktopShortcutPageDialog == error
     Abort
   ${EndIf}
 
-  ${NSD_CreateCheckbox} 0u 0u 100% 12u "Create a desktop shortcut"
+  ${NSD_CreateCheckbox} 0u 0u 100% 12u "$(LICHII_SHORTCUT_CHECKBOX)"
   Pop $DesktopShortcutCheckbox
   ${NSD_SetState} $DesktopShortcutCheckbox $DesktopShortcut
 
