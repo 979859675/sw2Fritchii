@@ -156,17 +156,28 @@ jobs:
           path: .sccache
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
-      # The Chinese .qm file must be inside the program, not merely next to it.
+      # The Chinese .qm files are compiled by lrelease into the target's resource bundle (QRC lists
+      # bare names under the "languages" prefix), so they are inside the executable rather than
+      # shipped beside it. Check both the bundle and the compiled resource: Qt stores resource names
+      # as UTF-16, hence the NUL bytes in the pattern.
       - name: Verify the Chinese translation is embedded
         shell: bash
         run: |
           set -euo pipefail
-          test -f dist/languages/zh_CN.ts
-          if ! grep -q 'languages/zh_CN.qm' build/zh-cn/src/yuzu/languages.qrc; then
-            echo "zh_CN.qm is missing from the embedded translation bundle"
+          qrc=build/zh-cn/src/yuzu/languages.qrc
+          test -f "$qrc" || { echo "$qrc is missing: translations were not compiled"; exit 1; }
+          for lang in zh_CN ja_JP de; do
+            grep -q "<file>$lang.qm</file>" "$qrc" || { echo "$lang.qm missing from the bundle"; exit 1; }
+          done
+          test -s build/zh-cn/src/yuzu/zh_CN.qm
+          # qResource names are UTF-16 in the compiled resource; --text matches binary files too.
+          printf 'z\x00h\x00_\x00C\x00N\x00' > zh_cn_utf16.bin
+          if ! grep --text --quiet --fixed-strings --file=zh_cn_utf16.bin build/zh-cn/bin/lichii.exe; then
+            echo "zh_CN.qm is not embedded in lichii.exe"
             exit 1
           fi
-          ls build/zh-cn/src/yuzu/*.qm | sed 's#^.*/##' | sort | tr '\n' ' '
+          echo "embedded translations:"
+          grep -o '<file>[^<]*</file>' "$qrc" | tr -d '<>/' | sed 's/^file//' | sort | tr '\n' ' '
           echo
 
       - name: Package Windows binary
