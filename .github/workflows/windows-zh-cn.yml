@@ -72,11 +72,22 @@ jobs:
           $bin = (Get-ChildItem -Recurse -Filter sccache.exe (Join-Path $env:RUNNER_TEMP 'sccache')).DirectoryName
           $bin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
+      # NSIS 3.11 from Chocolatey: 3.10 (choco's older package) has no UTF-8 input charset for /D
+      # values, which the Chinese installer title needs.
       - name: Install NSIS
         shell: pwsh
         run: |
-          choco install nsis -y --no-progress
-          "C:\Program Files (x86)\NSIS" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP -Force
+          $nsis = Join-Path $env:RUNNER_TEMP 'nsis-3.11'
+          # Plugins are not part of the portable zip; nsDialogs and MUI2 are.
+          if (-not (Test-Path "$nsis\makensis.exe")) { throw 'makensis.exe missing from the NSIS zip' }
+          $nsis | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          "NSISDIR=$nsis" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          & "$nsis\makensis.exe" /VERSION
 
       - name: Install Vulkan SDK
         shell: pwsh
@@ -201,7 +212,8 @@ jobs:
           Copy-Item dist/installer.nsi $stage/installer.nsi
           Copy-Item dist/lichii.ico $stage/lichii.ico
           Copy-Item LICENSE.txt $stage/LICENSE.txt
-          # The installer asks in Chinese only: Simplified is preselected, Traditional is offered.
+          # One list, both scripts: every language name this list mentions must exist in the installer
+          # script, which is the language codes below. Simplified Chinese is the default.
           @'
           !insertmacro MUI_LANGUAGE "English"
           !insertmacro MUI_LANGUAGE "SimpChinese"
