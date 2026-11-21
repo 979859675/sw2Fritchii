@@ -87,7 +87,7 @@ li.checked::marker { content: "\2612"; }
     <message>
         <location filename="../../src/yuzu/multiplayer/chat_room.ui" line="14"/>
         <source>Room Window</source>
-        <translation>聊天室窗口</translation>
+        <translation>房间窗口</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/multiplayer/chat_room.ui" line="40"/>
@@ -3036,7 +3036,7 @@ Enabling it bypasses such prompts and directly exits the emulation.</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_dialog.cpp" line="84"/>
         <source>Web</source>
-        <translation>网络</translation>
+        <translation>Web</translation>
     </message>
 </context>
 <context>
@@ -5965,7 +5965,7 @@ Drag points to change position, or double-click table cells to edit values.</sou
     <message>
         <location filename="../../src/yuzu/configuration/configure_web.ui" line="17"/>
         <source>Web</source>
-        <translation>网络</translation>
+        <translation>Web</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_web.ui" line="25"/>
@@ -6757,7 +6757,7 @@ Please go to Configure -&gt; System -&gt; Network and make a selection.</source>
         <location filename="../../src/yuzu/multiplayer/host_room.cpp" line="187"/>
         <source>Failed to announce the room to the public lobby. In order to host a room publicly, you must have a valid Eden account configured in Emulation -&gt; Configure -&gt; Web. If you do not want to publish a room in the public lobby, then select Unlisted instead.
 Debug Message: </source>
-        <translation> </translation>
+        <translation>无法在公开大厅中发布房间。若要在公开大厅中开设房间，必须在「模拟 → 设置 → Web」中配置有效的 Eden 账号。如果你不想在公开大厅中公开房间，请改选「私有」。\n调试信息：</translation>
     </message>
 </context>
 <context>
