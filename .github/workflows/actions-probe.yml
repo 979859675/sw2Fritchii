@@ -1,0 +1,12 @@
+name: actions-probe
+on:
+  push:
+    branches: [ "arena/6f3f05b9-sw2fritchii" ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "actions are alive"
