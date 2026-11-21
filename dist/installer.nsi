@@ -1,4 +1,4 @@
-; SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+﻿; SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 ; SPDX-License-Identifier: GPL-3.0-or-later
 
 ; Usage:
@@ -19,6 +19,12 @@
 
 Unicode true
 ManifestDPIAware true
+
+; A localized build passes INSTALLER_CONFIG_FILE: an .nsh of !define overrides (title, language list,
+; default language) read before the defaults below.
+!ifdef INSTALLER_CONFIG_FILE
+  !include "${INSTALLER_CONFIG_FILE}"
+!endif
 
 !ifndef PRODUCT_NAME
   !define PRODUCT_NAME "Lichii"
