@@ -8,6 +8,8 @@ on:
   push:
     branches:
       - nx2
+      # Localization branches build too, so a translation change can be tested before it lands.
+      - "arena/**"
     paths:
       - "dist/languages/**"
       - "dist/installer.nsi"
