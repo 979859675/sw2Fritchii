@@ -7,6 +7,21 @@ permissions:
   contents: read
 jobs:
   probe:
-    runs-on: ubuntu-24.04
+    runs-on: windows-2022
     steps:
-      - run: echo "actions are alive"
+      - uses: actions/checkout@v5
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtcharts
+          cache: true
+      - shell: bash
+        run: |
+          echo "QT_ROOT_DIR=$QT_ROOT_DIR"
+          ls "$QT_ROOT_DIR/bin" | grep -i -E 'lrelease|lupdate|windeployqt' || true
+          find "$QT_ROOT_DIR" -name 'Qt6LinguistTools*' | head -3
+      - shell: pwsh
+        run: choco install nsis -y --no-progress; Get-Command makensis
