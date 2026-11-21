@@ -235,3 +235,46 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+  # Keeps the newest Chinese package where a download link can point at it: a fixed tag, replaced
+  # on every successful build, next to the per-run artifacts.
+  release:
+    name: Publish Chinese package
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v7
+        with:
+          name: lichii-windows-x86_64-zh-cn
+          path: dist
+
+      - name: List package
+        run: ls -la dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="zh-cn-latest"
+          notes=$(printf '%s\n' \
+            "Lichii 简体中文版 · 构建 \`${GITHUB_SHA::7}\`（运行 #${GITHUB_RUN_NUMBER}）" \
+            "" \
+            "- \`lichii-windows-x86_64-zh-cn-setup.exe\`：中文安装程序，仅提供简体/繁体中文界面。" \
+            "- \`lichii-windows-x86_64-zh-cn.zip\`：免安装版，解压后运行 \`lichii.exe\`。" \
+            "" \
+            "界面语言：\`模拟 -> 设置 -> 界面\` 中选择“简体中文 (zh_CN)”，或在配置文件中设置 \`language=zh_CN\`。" \
+            "" \
+            "本页内容由每次构建自动替换，安装包与本仓库当前分支的翻译保持同步。")
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+          gh release create "$tag" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Lichii 简体中文版（最新构建）" \
+            --notes "$notes"
